@@ -378,7 +378,7 @@
   function showApp(user) {
     currentUser = user;
     document.getElementById('authPanel').style.display = 'none';
-    document.getElementById('appPanel').style.display  = '';
+    document.getElementById('appPanel').style.display  = 'block';
     document.getElementById('userEmail').textContent   = user.email;
     loadTasks();
   }
@@ -387,7 +387,7 @@
     currentUser = null;
     tasks = [];
     document.getElementById('appPanel').style.display  = 'none';
-    document.getElementById('authPanel').style.display = '';
+    document.getElementById('authPanel').style.display = 'block';
   }
 
   // ── Supabase REST helpers ──
