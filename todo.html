@@ -4,12 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Todo Uygulaması</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
       font-family: 'Segoe UI', sans-serif;
@@ -30,18 +27,103 @@
       padding: 32px;
     }
 
-    h1 {
-      font-size: 1.6rem;
-      color: #1a1a2e;
+    h1 { font-size: 1.6rem; color: #1a1a2e; margin-bottom: 8px; text-align: center; }
+
+    /* ── Auth panel ── */
+    #authPanel {}
+
+    .auth-tabs {
+      display: flex;
+      gap: 0;
       margin-bottom: 24px;
-      text-align: center;
+      border-bottom: 2px solid #e0e0e0;
     }
 
-    .input-row {
+    .auth-tabs button {
+      flex: 1;
+      padding: 10px;
+      background: none;
+      border: none;
+      font-size: 0.95rem;
+      color: #999;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.2s;
+    }
+
+    .auth-tabs button.active {
+      color: #6c63ff;
+      border-bottom-color: #6c63ff;
+      font-weight: 600;
+    }
+
+    .auth-form { display: flex; flex-direction: column; gap: 12px; }
+
+    .auth-form input {
+      padding: 10px 14px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .auth-form input:focus { border-color: #6c63ff; }
+
+    .auth-form button[type="submit"] {
+      padding: 11px;
+      background: #6c63ff;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .auth-form button[type="submit"]:hover { background: #574fd6; }
+    .auth-form button[type="submit"]:disabled { background: #b3b0f5; cursor: not-allowed; }
+
+    .info-box {
+      background: #f0eeff;
+      color: #6c63ff;
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      display: none;
+    }
+
+    /* ── App panel ── */
+    #appPanel { display: none; }
+
+    .app-header {
       display: flex;
-      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
       margin-bottom: 24px;
     }
+
+    .app-header h1 { margin-bottom: 0; font-size: 1.3rem; }
+
+    .user-info { font-size: 0.78rem; color: #999; text-align: right; }
+
+    .logout-btn {
+      background: none;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-size: 0.8rem;
+      color: #888;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 4px;
+    }
+
+    .logout-btn:hover { border-color: #e74c3c; color: #e74c3c; }
+
+    .input-row { display: flex; gap: 8px; margin-bottom: 24px; }
 
     .input-row input {
       flex: 1;
@@ -53,9 +135,7 @@
       transition: border-color 0.2s;
     }
 
-    .input-row input:focus {
-      border-color: #6c63ff;
-    }
+    .input-row input:focus { border-color: #6c63ff; }
 
     .input-row button {
       padding: 10px 18px;
@@ -68,15 +148,9 @@
       transition: background 0.2s;
     }
 
-    .input-row button:hover {
-      background: #574fd6;
-    }
+    .input-row button:hover { background: #574fd6; }
 
-    .filters {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 16px;
-    }
+    .filters { display: flex; gap: 8px; margin-bottom: 16px; }
 
     .filters button {
       flex: 1;
@@ -90,15 +164,9 @@
       transition: all 0.2s;
     }
 
-    .filters button.active {
-      border-color: #6c63ff;
-      color: #6c63ff;
-      font-weight: 600;
-    }
+    .filters button.active { border-color: #6c63ff; color: #6c63ff; font-weight: 600; }
 
-    ul {
-      list-style: none;
-    }
+    ul { list-style: none; }
 
     li {
       display: flex;
@@ -109,9 +177,7 @@
       animation: fadeIn 0.2s ease;
     }
 
-    li:last-child {
-      border-bottom: none;
-    }
+    li:last-child { border-bottom: none; }
 
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(-6px); }
@@ -119,141 +185,112 @@
     }
 
     li input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
+      width: 18px; height: 18px;
       accent-color: #6c63ff;
-      cursor: pointer;
-      flex-shrink: 0;
+      cursor: pointer; flex-shrink: 0;
     }
 
-    li span {
-      flex: 1;
-      font-size: 0.95rem;
-      color: #333;
-      word-break: break-word;
+    li span { flex: 1; font-size: 0.95rem; color: #333; word-break: break-word; }
+    li.done span { text-decoration: line-through; color: #aaa; }
+
+    li .edit-btn, li .delete-btn {
+      background: none; border: none;
+      font-size: 1rem; cursor: pointer;
+      transition: color 0.2s; padding: 2px 6px; border-radius: 4px;
     }
 
-    li.done span {
-      text-decoration: line-through;
-      color: #aaa;
-    }
-
-    li .edit-btn,
-    li .delete-btn {
-      background: none;
-      border: none;
-      font-size: 1rem;
-      cursor: pointer;
-      transition: color 0.2s;
-      padding: 2px 6px;
-      border-radius: 4px;
-    }
-
-    li .edit-btn {
-      color: #ccc;
-    }
-
-    li .edit-btn:hover {
-      color: #6c63ff;
-    }
-
-    li .delete-btn {
-      color: #ccc;
-      font-size: 1.1rem;
-    }
-
-    li .delete-btn:hover {
-      color: #e74c3c;
-    }
+    li .edit-btn { color: #ccc; }
+    li .edit-btn:hover { color: #6c63ff; }
+    li .delete-btn { color: #ccc; font-size: 1.1rem; }
+    li .delete-btn:hover { color: #e74c3c; }
 
     li .edit-input {
-      flex: 1;
-      padding: 4px 8px;
-      border: 2px solid #6c63ff;
-      border-radius: 6px;
-      font-size: 0.95rem;
-      outline: none;
+      flex: 1; padding: 4px 8px;
+      border: 2px solid #6c63ff; border-radius: 6px;
+      font-size: 0.95rem; outline: none;
     }
 
     li .save-btn {
-      background: #6c63ff;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      padding: 4px 10px;
-      font-size: 0.85rem;
-      cursor: pointer;
+      background: #6c63ff; color: #fff; border: none;
+      border-radius: 6px; padding: 4px 10px; font-size: 0.85rem; cursor: pointer;
     }
 
-    li .save-btn:hover {
-      background: #574fd6;
-    }
+    li .save-btn:hover { background: #574fd6; }
 
     li .cancel-btn {
-      background: none;
-      border: none;
-      color: #aaa;
-      font-size: 1.1rem;
-      cursor: pointer;
-      padding: 2px 6px;
-      border-radius: 4px;
+      background: none; border: none; color: #aaa;
+      font-size: 1.1rem; cursor: pointer; padding: 2px 6px; border-radius: 4px;
     }
 
-    li .cancel-btn:hover {
-      color: #e74c3c;
-    }
+    li .cancel-btn:hover { color: #e74c3c; }
 
-    .empty {
-      text-align: center;
-      color: #bbb;
-      font-size: 0.9rem;
-      padding: 24px 0;
-    }
+    .empty { text-align: center; color: #bbb; font-size: 0.9rem; padding: 24px 0; }
+    .loading { text-align: center; color: #bbb; font-size: 0.9rem; padding: 24px 0; }
 
     .footer {
-      margin-top: 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 0.82rem;
-      color: #aaa;
+      margin-top: 16px; display: flex;
+      justify-content: space-between; align-items: center;
+      font-size: 0.82rem; color: #aaa;
     }
 
     .footer button {
-      background: none;
-      border: none;
-      color: #e74c3c;
-      cursor: pointer;
-      font-size: 0.82rem;
+      background: none; border: none;
+      color: #e74c3c; cursor: pointer; font-size: 0.82rem;
     }
 
-    .footer button:hover {
-      text-decoration: underline;
-    }
-
-    .loading {
-      text-align: center;
-      color: #bbb;
-      font-size: 0.9rem;
-      padding: 24px 0;
-    }
+    .footer button:hover { text-decoration: underline; }
 
     .error-msg {
-      background: #fff0f0;
-      color: #e74c3c;
-      border-radius: 8px;
-      padding: 10px 14px;
-      font-size: 0.85rem;
-      margin-bottom: 12px;
-      display: none;
+      background: #fff0f0; color: #e74c3c;
+      border-radius: 8px; padding: 10px 14px;
+      font-size: 0.85rem; margin-bottom: 12px; display: none;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Yapılacaklar</h1>
+<div class="container">
 
-    <div id="errorMsg" class="error-msg"></div>
+  <!-- ── Auth Panel ── -->
+  <div id="authPanel">
+    <h1 style="margin-bottom:24px">Yapılacaklar</h1>
+    <div id="authError" class="error-msg"></div>
+
+    <div class="auth-tabs">
+      <button id="tabLogin"  class="active" onclick="switchTab('login')">Giriş Yap</button>
+      <button id="tabSignup" onclick="switchTab('signup')">Kayıt Ol</button>
+    </div>
+
+    <!-- Login -->
+    <form id="loginForm" class="auth-form" onsubmit="handleLogin(event)">
+      <input id="loginEmail"    type="email"    placeholder="E-posta" required>
+      <input id="loginPassword" type="password" placeholder="Şifre (min 6 karakter)" required minlength="6">
+      <button type="submit" id="loginBtn">Giriş Yap</button>
+    </form>
+
+    <!-- Signup -->
+    <form id="signupForm" class="auth-form" style="display:none" onsubmit="handleSignup(event)">
+      <input id="signupEmail"    type="email"    placeholder="E-posta" required>
+      <input id="signupPassword" type="password" placeholder="Şifre (min 6 karakter)" required minlength="6">
+      <button type="submit" id="signupBtn">Kayıt Ol</button>
+    </form>
+
+    <div id="confirmBox" class="info-box" style="margin-top:16px">
+      Kayıt başarılı! E-postanıza bir onay bağlantısı gönderdik.<br>
+      Lütfen e-postanızı kontrol edip bağlantıya tıklayın.
+    </div>
+  </div>
+
+  <!-- ── App Panel ── -->
+  <div id="appPanel">
+    <div class="app-header">
+      <h1>Yapılacaklar</h1>
+      <div class="user-info">
+        <div id="userEmail"></div>
+        <button class="logout-btn" onclick="handleLogout()">Çıkış Yap</button>
+      </div>
+    </div>
+
+    <div id="appError" class="error-msg"></div>
 
     <div class="input-row">
       <input id="taskInput" type="text" placeholder="Yeni görev ekle..." maxlength="120">
@@ -268,7 +305,7 @@
 
     <ul id="taskList"></ul>
     <p id="loadingMsg" class="loading">Yükleniyor...</p>
-    <p id="emptyMsg" class="empty" style="display:none">Henüz görev yok.</p>
+    <p id="emptyMsg"   class="empty"   style="display:none">Henüz görev yok.</p>
 
     <div class="footer">
       <span id="countMsg"></span>
@@ -276,195 +313,259 @@
     </div>
   </div>
 
-  <script>
-    const SUPABASE_URL  = 'https://tgwsexnnelsntvlnsxii.supabase.co';
-    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnd3NleG5uZWxzbnR2bG5zeGlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NjEzMDAsImV4cCI6MjA5MjMzNzMwMH0.kJb1hHVEjge4Hu14bT8siIisNWxYR3s45QcdgM10-5Y';
+</div>
 
-    const headers = {
-      'apikey': SUPABASE_ANON,
-      'Authorization': `Bearer ${SUPABASE_ANON}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=representation'
-    };
+<script>
+  const SUPABASE_URL  = 'https://tgwsexnnelsntvlnsxii.supabase.co';
+  const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnd3NleG5uZWxzbnR2bG5zeGlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NjEzMDAsImV4cCI6MjA5MjMzNzMwMH0.kJb1hHVEjge4Hu14bT8siIisNWxYR3s45QcdgM10-5Y';
 
-    let tasks  = [];
-    let filter = 'all';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-    const input      = document.getElementById('taskInput');
-    const list       = document.getElementById('taskList');
-    const emptyMsg   = document.getElementById('emptyMsg');
-    const loadingMsg = document.getElementById('loadingMsg');
-    const countMsg   = document.getElementById('countMsg');
-    const errorMsg   = document.getElementById('errorMsg');
+  let tasks  = [];
+  let filter = 'all';
+  let currentUser = null;
 
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') addTask(); });
+  // ── Auth helpers ──
+  function switchTab(tab) {
+    const isLogin = tab === 'login';
+    document.getElementById('loginForm').style.display  = isLogin ? '' : 'none';
+    document.getElementById('signupForm').style.display = isLogin ? 'none' : '';
+    document.getElementById('tabLogin').classList.toggle('active', isLogin);
+    document.getElementById('tabSignup').classList.toggle('active', !isLogin);
+    document.getElementById('confirmBox').style.display = 'none';
+    document.getElementById('authError').style.display  = 'none';
+  }
 
-    function showError(msg) {
-      errorMsg.textContent = msg;
-      errorMsg.style.display = 'block';
-      setTimeout(() => errorMsg.style.display = 'none', 4000);
-    }
+  function showAuthError(msg) {
+    const el = document.getElementById('authError');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
 
-    async function api(path, method = 'GET', body) {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || res.statusText);
-      }
-      if (res.status === 204) return [];
-      return res.json();
-    }
+  async function handleLogin(e) {
+    e.preventDefault();
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true; btn.textContent = 'Giriş yapılıyor...';
+    const { error } = await sb.auth.signInWithPassword({
+      email:    document.getElementById('loginEmail').value.trim(),
+      password: document.getElementById('loginPassword').value,
+    });
+    btn.disabled = false; btn.textContent = 'Giriş Yap';
+    if (error) showAuthError(error.message);
+  }
 
-    async function loadTasks() {
-      try {
-        tasks = await api('todos?select=*&order=created_at.asc');
-      } catch (e) {
-        showError('Görevler yüklenemedi: ' + e.message);
-      } finally {
-        loadingMsg.style.display = 'none';
-        render();
-      }
-    }
+  async function handleSignup(e) {
+    e.preventDefault();
+    const btn = document.getElementById('signupBtn');
+    btn.disabled = true; btn.textContent = 'Kaydediliyor...';
+    const { error } = await sb.auth.signUp({
+      email:    document.getElementById('signupEmail').value.trim(),
+      password: document.getElementById('signupPassword').value,
+      options:  { emailRedirectTo: 'https://serminoz.github.io/todo-app/todo.html' }
+    });
+    btn.disabled = false; btn.textContent = 'Kayıt Ol';
+    if (error) { showAuthError(error.message); return; }
+    document.getElementById('signupForm').style.display = 'none';
+    document.getElementById('confirmBox').style.display  = 'block';
+    document.getElementById('authError').style.display   = 'none';
+  }
 
-    async function addTask() {
-      const text = input.value.trim();
-      if (!text) return;
-      input.value = '';
-      try {
-        const [created] = await api('todos', 'POST', { text, done: false });
-        tasks.push(created);
-        render();
-      } catch (e) {
-        showError('Görev eklenemedi: ' + e.message);
-        input.value = text;
-      }
-    }
+  async function handleLogout() {
+    await sb.auth.signOut();
+  }
 
-    async function toggleTask(id) {
-      const t = tasks.find(t => t.id === id);
-      if (!t) return;
-      const newDone = !t.done;
-      t.done = newDone;
-      render();
-      try {
-        await api(`todos?id=eq.${id}`, 'PATCH', { done: newDone });
-      } catch (e) {
-        t.done = !newDone;
-        showError('Güncellenemedi: ' + e.message);
-        render();
-      }
-    }
-
-    function startEdit(id) {
-      const li = document.querySelector(`li[data-id="${id}"]`);
-      const t  = tasks.find(t => t.id === id);
-      if (!li || !t) return;
-
-      li.innerHTML = `
-        <input type="checkbox" ${t.done ? 'checked' : ''} disabled>
-        <input class="edit-input" type="text" value="${escHtml(t.text)}" maxlength="120">
-        <button class="save-btn" onclick="saveEdit(${id})">Kaydet</button>
-        <button class="cancel-btn" onclick="render()" title="İptal">&#x2715;</button>
-      `;
-
-      const editInput = li.querySelector('.edit-input');
-      editInput.focus();
-      editInput.select();
-      editInput.addEventListener('keydown', e => {
-        if (e.key === 'Enter')  saveEdit(id);
-        if (e.key === 'Escape') render();
-      });
-    }
-
-    async function saveEdit(id) {
-      const li        = document.querySelector(`li[data-id="${id}"]`);
-      const editInput = li && li.querySelector('.edit-input');
-      const newText   = editInput ? editInput.value.trim() : '';
-      if (!newText) return;
-      const t = tasks.find(t => t.id === id);
-      if (!t) return;
-      const oldText = t.text;
-      t.text = newText;
-      render();
-      try {
-        await api(`todos?id=eq.${id}`, 'PATCH', { text: newText });
-      } catch (e) {
-        t.text = oldText;
-        showError('Düzenlenemedi: ' + e.message);
-        render();
-      }
-    }
-
-    async function deleteTask(id) {
-      const prev = [...tasks];
-      tasks = tasks.filter(t => t.id !== id);
-      render();
-      try {
-        await api(`todos?id=eq.${id}`, 'DELETE');
-      } catch (e) {
-        tasks = prev;
-        showError('Silinemedi: ' + e.message);
-        render();
-      }
-    }
-
-    async function clearDone() {
-      const prev = [...tasks];
-      const doneIds = tasks.filter(t => t.done).map(t => t.id);
-      if (!doneIds.length) return;
-      tasks = tasks.filter(t => !t.done);
-      render();
-      try {
-        await api(`todos?id=in.(${doneIds.join(',')})`, 'DELETE');
-      } catch (e) {
-        tasks = prev;
-        showError('Silinemedi: ' + e.message);
-        render();
-      }
-    }
-
-    function setFilter(f, btn) {
-      filter = f;
-      document.querySelectorAll('.filters button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      render();
-    }
-
-    function render() {
-      const visible = tasks.filter(t =>
-        filter === 'all'    ? true :
-        filter === 'active' ? !t.done :
-                               t.done
-      );
-
-      list.innerHTML = '';
-      visible.forEach(t => {
-        const li = document.createElement('li');
-        li.setAttribute('data-id', t.id);
-        if (t.done) li.classList.add('done');
-        li.innerHTML = `
-          <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${t.id})">
-          <span>${escHtml(t.text)}</span>
-          <button class="edit-btn" onclick="startEdit(${t.id})" title="Düzenle">&#x270E;</button>
-          <button class="delete-btn" onclick="deleteTask(${t.id})" title="Sil">&#x2715;</button>
-        `;
-        list.appendChild(li);
-      });
-
-      const remaining = tasks.filter(t => !t.done).length;
-      countMsg.textContent = `${remaining} görev kaldı`;
-      emptyMsg.style.display = visible.length === 0 ? 'block' : 'none';
-    }
-
-    function escHtml(s) {
-      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-
+  // ── UI switch ──
+  function showApp(user) {
+    currentUser = user;
+    document.getElementById('authPanel').style.display = 'none';
+    document.getElementById('appPanel').style.display  = '';
+    document.getElementById('userEmail').textContent   = user.email;
     loadTasks();
-  </script>
+  }
+
+  function showAuth() {
+    currentUser = null;
+    tasks = [];
+    document.getElementById('appPanel').style.display  = 'none';
+    document.getElementById('authPanel').style.display = '';
+  }
+
+  // ── Supabase REST helpers ──
+  function authHeaders(token) {
+    return {
+      'apikey':        SUPABASE_ANON,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type':  'application/json',
+      'Prefer':        'return=representation'
+    };
+  }
+
+  async function api(path, method = 'GET', body) {
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      method,
+      headers: authHeaders(session.access_token),
+      body: body ? JSON.stringify(body) : undefined
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || res.statusText);
+    }
+    if (res.status === 204) return [];
+    return res.json();
+  }
+
+  function showAppError(msg) {
+    const el = document.getElementById('appError');
+    el.textContent = msg;
+    el.style.display = 'block';
+    setTimeout(() => el.style.display = 'none', 4000);
+  }
+
+  // ── Task operations ──
+  async function loadTasks() {
+    document.getElementById('loadingMsg').style.display = 'block';
+    document.getElementById('emptyMsg').style.display   = 'none';
+    try {
+      tasks = await api('todos?select=*&order=created_at.asc');
+    } catch (e) {
+      showAppError('Görevler yüklenemedi: ' + e.message);
+    } finally {
+      document.getElementById('loadingMsg').style.display = 'none';
+      render();
+    }
+  }
+
+  async function addTask() {
+    const input = document.getElementById('taskInput');
+    const text  = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    try {
+      const [created] = await api('todos', 'POST', { text, done: false, user_id: currentUser.id });
+      tasks.push(created);
+      render();
+    } catch (e) {
+      showAppError('Görev eklenemedi: ' + e.message);
+      input.value = text;
+    }
+  }
+
+  async function toggleTask(id) {
+    const t = tasks.find(t => t.id === id);
+    if (!t) return;
+    const newDone = !t.done;
+    t.done = newDone; render();
+    try {
+      await api(`todos?id=eq.${id}`, 'PATCH', { done: newDone });
+    } catch (e) {
+      t.done = !newDone;
+      showAppError('Güncellenemedi: ' + e.message); render();
+    }
+  }
+
+  function startEdit(id) {
+    const li = document.querySelector(`li[data-id="${id}"]`);
+    const t  = tasks.find(t => t.id === id);
+    if (!li || !t) return;
+    li.innerHTML = `
+      <input type="checkbox" ${t.done ? 'checked' : ''} disabled>
+      <input class="edit-input" type="text" value="${escHtml(t.text)}" maxlength="120">
+      <button class="save-btn" onclick="saveEdit(${id})">Kaydet</button>
+      <button class="cancel-btn" onclick="render()" title="İptal">&#x2715;</button>
+    `;
+    const ei = li.querySelector('.edit-input');
+    ei.focus(); ei.select();
+    ei.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  saveEdit(id);
+      if (e.key === 'Escape') render();
+    });
+  }
+
+  async function saveEdit(id) {
+    const li      = document.querySelector(`li[data-id="${id}"]`);
+    const ei      = li && li.querySelector('.edit-input');
+    const newText = ei ? ei.value.trim() : '';
+    if (!newText) return;
+    const t = tasks.find(t => t.id === id);
+    if (!t) return;
+    const old = t.text;
+    t.text = newText; render();
+    try {
+      await api(`todos?id=eq.${id}`, 'PATCH', { text: newText });
+    } catch (e) {
+      t.text = old; showAppError('Düzenlenemedi: ' + e.message); render();
+    }
+  }
+
+  async function deleteTask(id) {
+    const prev = [...tasks];
+    tasks = tasks.filter(t => t.id !== id); render();
+    try {
+      await api(`todos?id=eq.${id}`, 'DELETE');
+    } catch (e) {
+      tasks = prev; showAppError('Silinemedi: ' + e.message); render();
+    }
+  }
+
+  async function clearDone() {
+    const prev    = [...tasks];
+    const doneIds = tasks.filter(t => t.done).map(t => t.id);
+    if (!doneIds.length) return;
+    tasks = tasks.filter(t => !t.done); render();
+    try {
+      await api(`todos?id=in.(${doneIds.join(',')})`, 'DELETE');
+    } catch (e) {
+      tasks = prev; showAppError('Silinemedi: ' + e.message); render();
+    }
+  }
+
+  function setFilter(f, btn) {
+    filter = f;
+    document.querySelectorAll('.filters button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    render();
+  }
+
+  function render() {
+    const list    = document.getElementById('taskList');
+    const emptyEl = document.getElementById('emptyMsg');
+    const countEl = document.getElementById('countMsg');
+    const input   = document.getElementById('taskInput');
+
+    const visible = tasks.filter(t =>
+      filter === 'all'    ? true :
+      filter === 'active' ? !t.done : t.done
+    );
+
+    list.innerHTML = '';
+    visible.forEach(t => {
+      const li = document.createElement('li');
+      li.setAttribute('data-id', t.id);
+      if (t.done) li.classList.add('done');
+      li.innerHTML = `
+        <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${t.id})">
+        <span>${escHtml(t.text)}</span>
+        <button class="edit-btn"   onclick="startEdit(${t.id})"  title="Düzenle">&#x270E;</button>
+        <button class="delete-btn" onclick="deleteTask(${t.id})" title="Sil">&#x2715;</button>
+      `;
+      list.appendChild(li);
+    });
+
+    countEl.textContent      = `${tasks.filter(t => !t.done).length} görev kaldı`;
+    emptyEl.style.display    = visible.length === 0 ? 'block' : 'none';
+    if (input) input.addEventListener('keydown', e => { if (e.key === 'Enter') addTask(); });
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Bootstrap ──
+  sb.auth.onAuthStateChange((_event, session) => {
+    if (session) showApp(session.user);
+    else         showAuth();
+  });
+</script>
 </body>
 </html>
