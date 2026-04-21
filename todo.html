@@ -230,11 +230,30 @@
     .footer button:hover {
       text-decoration: underline;
     }
+
+    .loading {
+      text-align: center;
+      color: #bbb;
+      font-size: 0.9rem;
+      padding: 24px 0;
+    }
+
+    .error-msg {
+      background: #fff0f0;
+      color: #e74c3c;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+      display: none;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Yapılacaklar</h1>
+
+    <div id="errorMsg" class="error-msg"></div>
 
     <div class="input-row">
       <input id="taskInput" type="text" placeholder="Yeni görev ekle..." maxlength="120">
@@ -248,7 +267,8 @@
     </div>
 
     <ul id="taskList"></ul>
-    <p id="emptyMsg" class="empty">Henüz görev yok.</p>
+    <p id="loadingMsg" class="loading">Yükleniyor...</p>
+    <p id="emptyMsg" class="empty" style="display:none">Henüz görev yok.</p>
 
     <div class="footer">
       <span id="countMsg"></span>
@@ -257,39 +277,91 @@
   </div>
 
   <script>
-    let tasks = JSON.parse(localStorage.getItem('tasks') || '[]');
+    const SUPABASE_URL  = 'https://tgwsexnnelsntvlnsxii.supabase.co';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnd3NleG5uZWxzbnR2bG5zeGlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NjEzMDAsImV4cCI6MjA5MjMzNzMwMH0.kJb1hHVEjge4Hu14bT8siIisNWxYR3s45QcdgM10-5Y';
+
+    const headers = {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${SUPABASE_ANON}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    };
+
+    let tasks  = [];
     let filter = 'all';
 
-    const input = document.getElementById('taskInput');
-    const list  = document.getElementById('taskList');
-    const empty = document.getElementById('emptyMsg');
-    const count = document.getElementById('countMsg');
+    const input      = document.getElementById('taskInput');
+    const list       = document.getElementById('taskList');
+    const emptyMsg   = document.getElementById('emptyMsg');
+    const loadingMsg = document.getElementById('loadingMsg');
+    const countMsg   = document.getElementById('countMsg');
+    const errorMsg   = document.getElementById('errorMsg');
 
     input.addEventListener('keydown', e => { if (e.key === 'Enter') addTask(); });
 
-    function save() {
-      localStorage.setItem('tasks', JSON.stringify(tasks));
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+      setTimeout(() => errorMsg.style.display = 'none', 4000);
     }
 
-    function addTask() {
+    async function api(path, method = 'GET', body) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || res.statusText);
+      }
+      if (res.status === 204) return [];
+      return res.json();
+    }
+
+    async function loadTasks() {
+      try {
+        tasks = await api('todos?select=*&order=created_at.asc');
+      } catch (e) {
+        showError('Görevler yüklenemedi: ' + e.message);
+      } finally {
+        loadingMsg.style.display = 'none';
+        render();
+      }
+    }
+
+    async function addTask() {
       const text = input.value.trim();
       if (!text) return;
-      tasks.push({ id: Date.now(), text, done: false });
       input.value = '';
-      save();
-      render();
+      try {
+        const [created] = await api('todos', 'POST', { text, done: false });
+        tasks.push(created);
+        render();
+      } catch (e) {
+        showError('Görev eklenemedi: ' + e.message);
+        input.value = text;
+      }
     }
 
-    function toggleTask(id) {
+    async function toggleTask(id) {
       const t = tasks.find(t => t.id === id);
-      if (t) t.done = !t.done;
-      save();
+      if (!t) return;
+      const newDone = !t.done;
+      t.done = newDone;
       render();
+      try {
+        await api(`todos?id=eq.${id}`, 'PATCH', { done: newDone });
+      } catch (e) {
+        t.done = !newDone;
+        showError('Güncellenemedi: ' + e.message);
+        render();
+      }
     }
 
     function startEdit(id) {
       const li = document.querySelector(`li[data-id="${id}"]`);
-      const t = tasks.find(t => t.id === id);
+      const t  = tasks.find(t => t.id === id);
       if (!li || !t) return;
 
       li.innerHTML = `
@@ -303,32 +375,56 @@
       editInput.focus();
       editInput.select();
       editInput.addEventListener('keydown', e => {
-        if (e.key === 'Enter') saveEdit(id);
+        if (e.key === 'Enter')  saveEdit(id);
         if (e.key === 'Escape') render();
       });
     }
 
-    function saveEdit(id) {
-      const li = document.querySelector(`li[data-id="${id}"]`);
+    async function saveEdit(id) {
+      const li        = document.querySelector(`li[data-id="${id}"]`);
       const editInput = li && li.querySelector('.edit-input');
-      const newText = editInput ? editInput.value.trim() : '';
+      const newText   = editInput ? editInput.value.trim() : '';
       if (!newText) return;
       const t = tasks.find(t => t.id === id);
-      if (t) t.text = newText;
-      save();
+      if (!t) return;
+      const oldText = t.text;
+      t.text = newText;
       render();
+      try {
+        await api(`todos?id=eq.${id}`, 'PATCH', { text: newText });
+      } catch (e) {
+        t.text = oldText;
+        showError('Düzenlenemedi: ' + e.message);
+        render();
+      }
     }
 
-    function deleteTask(id) {
+    async function deleteTask(id) {
+      const prev = [...tasks];
       tasks = tasks.filter(t => t.id !== id);
-      save();
       render();
+      try {
+        await api(`todos?id=eq.${id}`, 'DELETE');
+      } catch (e) {
+        tasks = prev;
+        showError('Silinemedi: ' + e.message);
+        render();
+      }
     }
 
-    function clearDone() {
+    async function clearDone() {
+      const prev = [...tasks];
+      const doneIds = tasks.filter(t => t.done).map(t => t.id);
+      if (!doneIds.length) return;
       tasks = tasks.filter(t => !t.done);
-      save();
       render();
+      try {
+        await api(`todos?id=in.(${doneIds.join(',')})`, 'DELETE');
+      } catch (e) {
+        tasks = prev;
+        showError('Silinemedi: ' + e.message);
+        render();
+      }
     }
 
     function setFilter(f, btn) {
@@ -360,15 +456,15 @@
       });
 
       const remaining = tasks.filter(t => !t.done).length;
-      count.textContent = `${remaining} görev kaldı`;
-      empty.style.display = visible.length === 0 ? 'block' : 'none';
+      countMsg.textContent = `${remaining} görev kaldı`;
+      emptyMsg.style.display = visible.length === 0 ? 'block' : 'none';
     }
 
     function escHtml(s) {
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    render();
+    loadTasks();
   </script>
 </body>
 </html>
